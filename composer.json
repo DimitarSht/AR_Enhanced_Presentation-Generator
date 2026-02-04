@@ -1,0 +1,15 @@
+{
+    "require": {
+        "endroid/qr-code": "^6.1",
+        "openai-php/client": "^0.18.0",
+        "symfony/http-client": "^8.0",
+        "nyholm/psr7": "^1.8",
+        "phpoffice/phppresentation": "dev-master",
+        "vlucas/phpdotenv": "^5.6"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    }
+}
