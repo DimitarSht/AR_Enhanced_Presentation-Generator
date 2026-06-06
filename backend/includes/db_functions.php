@@ -66,10 +66,9 @@ class PresentationDB {
             return false;
         }
 
-        $uploadPath = UPLOAD_DIR . $pres['stored_filename'];
-        $processedPath = PROCESSED_DIR . 'processed_' . $pres['stored_filename'];
-        if (file_exists($uploadPath)) @unlink($uploadPath);
-        if (file_exists($processedPath)) @unlink($processedPath);
+        $processedFilename = 'processed_' . $pres['stored_filename'];
+        deleteStoredFile('presentations', $pres['stored_filename'], UPLOAD_DIR . $pres['stored_filename']);
+        deleteStoredFile('processed', $processedFilename, PROCESSED_DIR . $processedFilename);
 
         $sql = "DELETE FROM presentations WHERE presentation_id = :pid";
         $stmt = $db->prepare($sql);

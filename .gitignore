@@ -2,8 +2,7 @@
 node_modules/
 npm-debug.log
 yarn-error.log
-/qrcodes/
-/uploads/
+/backend/storage/
 
 # Laravel 4 specific
 bootstrap/compiled.php
