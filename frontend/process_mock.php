@@ -125,7 +125,12 @@ $processedSlides = 0;
                         sleep(API_RATE_LIMIT_SLEEP);
                     }
 
-                    $mockImagePath = generateImageFromText($client, $slideAnalysis['text']);
+                    $mockImagePath = generateImageFromText(
+                        $client,
+                        $slideAnalysis['text'],
+                        $filename,
+                        $slideNum
+                    );
                     if (!MOCK_MODE) $apiCallCount++;
 
                     if ($mockImagePath && file_exists($mockImagePath)) {
@@ -347,7 +352,7 @@ function extractImageFromSlide($tempDir, $slideFile, $slideNum, $filename)
     return null;
 }
 
-function generateImageFromText($client, $text)
+function generateImageFromText($client, $text, $presentationFilename, $slideNum)
 {
     if (MOCK_MODE) {
         try {
@@ -391,7 +396,13 @@ function generateImageFromText($client, $text)
 
             imagestring($image, 5, 400, 900, "MOCK DATA - Testing Mode", $white);
 
-            $mockImagePath = AI_IMAGES_DIR . 'mock_' . uniqid() . '.png';
+            $mockImagePath = AI_IMAGES_DIR
+                . basename($presentationFilename)
+                . '_slide_'
+                . (int) $slideNum
+                . '_mock_'
+                . uniqid()
+                . '.png';
             imagepng($image, $mockImagePath);
             imagedestroy($image);
             persistFile('ai_images', basename($mockImagePath), $mockImagePath);
@@ -419,7 +430,13 @@ function generateImageFromText($client, $text)
 
             if (isset($response->data[0]->url)) {
                 $imageUrl = $response->data[0]->url;
-                $aiImagePath = AI_IMAGES_DIR . 'ai_' . uniqid() . '.png';
+                $aiImagePath = AI_IMAGES_DIR
+                    . basename($presentationFilename)
+                    . '_slide_'
+                    . (int) $slideNum
+                    . '_ai_'
+                    . uniqid()
+                    . '.png';
                 file_put_contents($aiImagePath, file_get_contents($imageUrl));
                 persistFile('ai_images', basename($aiImagePath), $aiImagePath);
                 return $aiImagePath;
