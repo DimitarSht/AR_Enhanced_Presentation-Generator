@@ -13,6 +13,10 @@ Parameters:
     Type: String
     Default: 127.0.0.1/32
     Description: CIDR allowed to SSH to EC2. Keep the default to disable remote SSH.
+  AllowedHttpCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR allowed to access the application over HTTP. Use your public IP with /32 for private access.
   InstanceType:
     Type: String
     Default: t3.micro
@@ -39,11 +43,10 @@ Parameters:
     Type: String
     Default: main
     Description: Branch or tag to deploy.
-  OpenAiApiKey:
+  OpenAiSecretName:
     Type: String
-    Default: ''
-    NoEcho: true
-    Description: Optional. Leave empty when only mock mode is used.
+    Default: ar-presentations/openai
+    Description: Secrets Manager secret containing the OpenAI API key as its SecretString.
 
 Mappings:
   Network:
@@ -155,7 +158,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: 0.0.0.0/0
+          CidrIp: !Ref AllowedHttpCidr
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
@@ -286,6 +289,10 @@ Resources:
                 Resource: !Ref DatabaseSecret
               - Effect: Allow
                 Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${OpenAiSecretName}-*'
+              - Effect: Allow
+                Action:
                   - cloudformation:SignalResource
                 Resource: !Ref AWS::StackId
 
@@ -356,6 +363,11 @@ Resources:
             --output text)"
           DB_USER="$(printf '%s' "$SECRET_JSON" | jq -r .username)"
           DB_PASS="$(printf '%s' "$SECRET_JSON" | jq -r .password)"
+          OPENAI_API_KEY="$(aws secretsmanager get-secret-value \
+            --region '${AWS::Region}' \
+            --secret-id '${OpenAiSecretName}' \
+            --query SecretString \
+            --output text 2>/dev/null || true)"
 
           TOKEN="$(curl -fsS -X PUT \
             -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600' \
@@ -366,7 +378,7 @@ Resources:
           DB_NAME=${DatabaseName}
           DB_USER=$DB_USER
           DB_PASS=$DB_PASS
-          OPENAI_API_KEY=${OpenAiApiKey}
+          OPENAI_API_KEY=$OPENAI_API_KEY
           PUBLIC_BASE_URL=http://${WebElasticIp}
           STORAGE_DRIVER=s3
           AWS_REGION=${AWS::Region}
@@ -401,6 +413,14 @@ Resources:
 
           a2dissite 000-default
           a2ensite ar-presentations
+
+          cat > /etc/php/8.3/apache2/conf.d/99-ar-presentations.ini <<'PHP'
+          upload_max_filesize = 20M
+          post_max_size = 22M
+          max_execution_time = 300
+          max_input_time = 300
+          memory_limit = 256M
+          PHP
 
           for attempt in $(seq 1 60); do
             if MYSQL_PWD="$DB_PASS" mysql \
@@ -570,5 +590,7 @@ Outputs:
     Value: !GetAtt Database.Endpoint.Address
   DatabaseSecretArn:
     Value: !Ref DatabaseSecret
+  OpenAiSecretName:
+    Value: !Ref OpenAiSecretName
   PresentationValidatorFunctionName:
     Value: !Ref PresentationValidatorFunction

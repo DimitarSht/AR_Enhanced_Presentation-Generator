@@ -43,7 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errors = [];
 
     if ($file['error'] !== UPLOAD_ERR_OK) {
-        $errors[] = "Upload error code: " . $file['error'];
+        displayError([uploadErrorMessage((int) $file['error'])]);
+        exit;
     }
 
     $allowedExtensions = ['pptx'];
@@ -54,15 +55,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $allowedMimeTypes = [
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/zip',
+        'application/octet-stream',
     ];
 
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-    $mimeType = finfo_file($finfo, $file['tmp_name']);
-    finfo_close($finfo);
+    $mimeType = null;
+    if (function_exists('finfo_open')) {
+        try {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo !== false) {
+                $detectedMimeType = finfo_file($finfo, $file['tmp_name']);
+                finfo_close($finfo);
+                if ($detectedMimeType !== false) {
+                    $mimeType = $detectedMimeType;
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('Unable to inspect the upload MIME type: ' . $e->getMessage());
+        }
+    }
 
-    if (!in_array($mimeType, $allowedMimeTypes)) {
+    if ($mimeType === null) {
+        $mimeType = $file['type'] ?? '';
+        error_log('Unable to initialize fileinfo; using the upload MIME type as a fallback.');
+    }
+
+    $isValidPptx = isValidPptxPackage($file['tmp_name']);
+
+    if (!in_array($mimeType, $allowedMimeTypes, true) && !$isValidPptx) {
         $errors[] = "Invalid file type detected.";
+    }
+
+    if (!$isValidPptx) {
+        $errors[] = "Invalid or corrupted PPTX file.";
     }
 
     if ($file['size'] > MAX_FILE_SIZE) {
@@ -158,5 +184,44 @@ function displayError($errors)
 
     </html>
 <?php
+}
+
+function isValidPptxPackage(string $path): bool
+{
+    if ($path === '' || !is_file($path)) {
+        return false;
+    }
+
+    $zip = new ZipArchive();
+    try {
+        $opened = $zip->open($path);
+    } catch (Throwable $e) {
+        error_log('Unable to inspect PPTX package: ' . $e->getMessage());
+        return false;
+    }
+
+    if ($opened !== true) {
+        return false;
+    }
+
+    $isValid = $zip->locateName('[Content_Types].xml') !== false
+        && $zip->locateName('ppt/presentation.xml') !== false;
+    $zip->close();
+
+    return $isValid;
+}
+
+function uploadErrorMessage(int $error): string
+{
+    return match ($error) {
+        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE =>
+            'The presentation exceeds the server upload limit. Maximum size is 20 MB.',
+        UPLOAD_ERR_PARTIAL => 'The presentation upload was interrupted. Please try again.',
+        UPLOAD_ERR_NO_FILE => 'Please select a presentation to upload.',
+        UPLOAD_ERR_NO_TMP_DIR => 'The server upload directory is unavailable.',
+        UPLOAD_ERR_CANT_WRITE => 'The server could not save the uploaded presentation.',
+        UPLOAD_ERR_EXTENSION => 'A server extension stopped the presentation upload.',
+        default => 'The presentation upload failed.',
+    };
 }
 ?>

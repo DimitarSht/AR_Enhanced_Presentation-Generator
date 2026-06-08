@@ -45,12 +45,30 @@ From the repository root:
 .\infrastructure\aws\deploy.ps1 `
   -KeyPairName ar-presentations `
   -Region eu-north-1 `
-  -GitRef codex/refactor-frontend-backend-aws
+  -GitRef codex/refactor-frontend-backend-aws `
+  -AllowedHttpCidr 203.0.113.10/32
 ```
 
 Use `main` for `GitRef` after the pull request is merged.
+Replace `203.0.113.10` with the public IP allowed to open the application. Omitting
+`AllowedHttpCidr` keeps HTTP public at `0.0.0.0/0`. If your ISP changes your public
+IP, deploy again with the new address before trying to open the application.
 
 The script prints the application URL, S3 bucket, RDS endpoint, EC2 instance ID, secret ARN, and Lambda function name.
+
+## Configure OpenAI
+
+OpenAI API billing is separate from AWS and ChatGPT. After creating an OpenAI
+project API key, configure it without putting the key in source control:
+
+```powershell
+.\infrastructure\aws\configure-openai.ps1
+```
+
+The script prompts for the key securely, stores it in AWS Secrets Manager as
+`ar-presentations/openai`, refreshes the EC2 application configuration through
+Systems Manager, and restarts Apache. The EC2 role can read only the configured
+OpenAI secret and the generated database secret.
 
 The stack creates a new S3 bucket under CloudFormation management. It does not adopt the bucket created during local testing. After deployment, use the bucket from the `StorageBucketName` output. Existing objects can be copied separately if they must be preserved.
 
@@ -106,6 +124,7 @@ The starter stack exposes HTTP on the Elastic IP. Before handling real user data
 - add a domain name
 - put an Application Load Balancer in front of EC2
 - issue an ACM certificate and redirect HTTP to HTTPS
+- restrict `AllowedHttpCidr` to trusted public IP addresses
 - restrict SSH or leave it disabled and use Session Manager
 - enable Multi-AZ RDS for higher availability
 - add CloudWatch alarms and AWS Backup
