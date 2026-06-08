@@ -37,7 +37,7 @@ Configure the web server document root as `frontend/`. Backend PHP files remain 
 ```bash
 composer install
 cp .env.example .env
-mysql -u root -p < backend/database/schema.sql
+mysql -u root -p ar_presentations < backend/database/schema.sql
 php -S localhost:8000 -t frontend
 ```
 
@@ -50,7 +50,15 @@ STORAGE_DRIVER=local
 
 The application creates writable local storage under `backend/storage/`.
 
+Register through the application, then promote an administrator explicitly when needed:
+
+```sql
+UPDATE users SET role = 'admin' WHERE username = 'your-username';
+```
+
 ## AWS support
+
+For a complete EC2, RDS, S3, and Lambda deployment, see [infrastructure/aws/README.md](infrastructure/aws/README.md). The included CloudFormation template creates the network, IAM roles, stable Elastic IP, Apache/PHP server, private database, private storage bucket, and PPTX validation Lambda.
 
 ### Amazon S3
 
@@ -65,9 +73,11 @@ AWS_S3_PREFIX=ar-presentations
 
 PPTX files are downloaded to `backend/storage/` as a local processing cache when needed. New and generated files are uploaded with S3 server-side encryption (`AES256`).
 
-The AWS SDK default credential provider chain is used. In AWS, attach an IAM role to the EC2 instance, ECS task, or Elastic Beanstalk environment. For local development, use an AWS profile or the standard `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables.
+In AWS, attach an IAM role to the EC2 instance, ECS task, or Elastic Beanstalk environment. For local development, either use an AWS profile or add `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to `.env`. Temporary credentials can also provide `AWS_SESSION_TOKEN`. Never commit `.env`.
 
-The role can start from [infrastructure/aws/s3-iam-policy.json](infrastructure/aws/s3-iam-policy.json). Replace the bucket name before applying it.
+The recommended policy is [infrastructure/aws/s3-iam-policy.json](infrastructure/aws/s3-iam-policy.json). This is an **IAM identity policy**, so attach it to the IAM user or role used by the application. Replace `REPLACE_WITH_BUCKET_NAME` before applying it. Do not paste this file into the S3 bucket policy editor; identity policies intentionally do not contain a `Principal`.
+
+A bucket policy is usually unnecessary when the application identity and bucket are in the same AWS account. If you need a resource-based bucket policy, use [infrastructure/aws/s3-bucket-policy.example.json](infrastructure/aws/s3-bucket-policy.example.json) and replace both the bucket name and `REPLACE_WITH_IAM_PRINCIPAL_ARN`.
 
 ### Amazon RDS
 

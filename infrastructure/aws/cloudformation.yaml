@@ -1,0 +1,596 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AR-Enhanced Presentation Generator on EC2, RDS MySQL, S3, and Lambda.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: ar-presentations
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9-]+'
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Existing EC2 key pair used for emergency SSH access.
+  AllowedSshCidr:
+    Type: String
+    Default: 127.0.0.1/32
+    Description: CIDR allowed to SSH to EC2. Keep the default to disable remote SSH.
+  AllowedHttpCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR allowed to access the application over HTTP. Use your public IP with /32 for private access.
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+  DatabaseInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    AllowedValues:
+      - db.t3.micro
+      - db.t3.small
+      - db.t4g.micro
+      - db.t4g.small
+  DatabaseName:
+    Type: String
+    Default: ar_presentations
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9_]+'
+  GitRepositoryUrl:
+    Type: String
+    Default: https://github.com/DimitarSht/AR_Enhanced_Presentation-Generator.git
+  GitRef:
+    Type: String
+    Default: main
+    Description: Branch or tag to deploy.
+  OpenAiSecretName:
+    Type: String
+    Default: ar-presentations/openai
+    Description: Secrets Manager secret containing the OpenAI API key as its SecretString.
+
+Mappings:
+  Network:
+    Cidrs:
+      Vpc: 10.20.0.0/16
+      PublicA: 10.20.10.0/24
+      PublicB: 10.20.11.0/24
+      PrivateA: 10.20.20.0/24
+      PrivateB: 10.20.21.0/24
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !FindInMap [Network, Cidrs, Vpc]
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-vpc'
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !FindInMap [Network, Cidrs, PublicA]
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-public-a'
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !FindInMap [Network, Cidrs, PublicB]
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-public-b'
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !FindInMap [Network, Cidrs, PrivateA]
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-private-a'
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !FindInMap [Network, Cidrs, PrivateB]
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-private-b'
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-public'
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetA
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetB
+
+  WebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTP and restricted SSH access to the application server.
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref AllowedHttpCidr
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AllowedSshCidr
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-web'
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: MySQL access from the application server only.
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref WebSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-database'
+
+  StorageBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+
+  DatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub '${EnvironmentName} RDS administrator credentials'
+      GenerateSecretString:
+        SecretStringTemplate: '{"username":"ar_admin"}'
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludePunctuation: true
+
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets for the application database.
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      AllocatedStorage: 20
+      BackupRetentionPeriod: 1
+      DBInstanceClass: !Ref DatabaseInstanceClass
+      DBName: !Ref DatabaseName
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      Engine: mysql
+      MasterUsername: !Sub '{{resolve:secretsmanager:${DatabaseSecret}:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DatabaseSecret}:SecretString:password}}'
+      MultiAZ: false
+      PubliclyAccessible: false
+      StorageEncrypted: true
+      StorageType: gp3
+      VPCSecurityGroups:
+        - !Ref DatabaseSecurityGroup
+
+  WebServerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: ApplicationStorageAndSecret
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !GetAtt StorageBucket.Arn
+                Condition:
+                  StringLike:
+                    s3:prefix:
+                      - ar-presentations
+                      - ar-presentations/*
+              - Effect: Allow
+                Action:
+                  - s3:DeleteObject
+                  - s3:GetObject
+                  - s3:GetObjectTagging
+                  - s3:PutObject
+                  - s3:PutObjectTagging
+                Resource: !Sub '${StorageBucket.Arn}/ar-presentations/*'
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref DatabaseSecret
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${OpenAiSecretName}-*'
+              - Effect: Allow
+                Action:
+                  - cloudformation:SignalResource
+                Resource: !Ref AWS::StackId
+
+  WebServerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref WebServerRole
+
+  WebServer:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - DefaultPublicRoute
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT20M
+    Properties:
+      ImageId: '{{resolve:ssm:/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id}}'
+      IamInstanceProfile: !Ref WebServerInstanceProfile
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      SecurityGroupIds:
+        - !Ref WebSecurityGroup
+      SubnetId: !Ref PublicSubnetA
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: true
+            Encrypted: true
+            VolumeSize: 20
+            VolumeType: gp3
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-web'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          exec > >(tee /var/log/ar-presentations-bootstrap.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+          export DEBIAN_FRONTEND=noninteractive
+          export HOME=/root
+          export COMPOSER_HOME=/root/.composer
+          install -d -m 0700 "$COMPOSER_HOME"
+          apt-get update
+          apt-get install -y \
+            apache2 composer curl default-mysql-client git jq unzip \
+            libapache2-mod-php php php-cli php-curl php-gd php-mbstring \
+            php-mysql php-xml php-zip
+
+          curl -fsSLo /tmp/awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          /tmp/aws/install
+
+          systemctl enable apache2
+          a2enmod rewrite headers
+
+          install -d -o www-data -g www-data /var/www/ar-presentations
+          git clone --branch '${GitRef}' --depth 1 '${GitRepositoryUrl}' /var/www/ar-presentations
+          cd /var/www/ar-presentations
+          COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+          install -d -o www-data -g www-data /var/www/ar-presentations/backend/storage
+
+          SECRET_JSON="$(aws secretsmanager get-secret-value \
+            --region '${AWS::Region}' \
+            --secret-id '${DatabaseSecret}' \
+            --query SecretString \
+            --output text)"
+          DB_USER="$(printf '%s' "$SECRET_JSON" | jq -r .username)"
+          DB_PASS="$(printf '%s' "$SECRET_JSON" | jq -r .password)"
+          OPENAI_API_KEY="$(aws secretsmanager get-secret-value \
+            --region '${AWS::Region}' \
+            --secret-id '${OpenAiSecretName}' \
+            --query SecretString \
+            --output text 2>/dev/null || true)"
+
+          TOKEN="$(curl -fsS -X PUT \
+            -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600' \
+            http://169.254.169.254/latest/api/token)"
+          cat > /var/www/ar-presentations/.env <<ENV
+          DB_HOST=${Database.Endpoint.Address}
+          DB_PORT=${Database.Endpoint.Port}
+          DB_NAME=${DatabaseName}
+          DB_USER=$DB_USER
+          DB_PASS=$DB_PASS
+          OPENAI_API_KEY=$OPENAI_API_KEY
+          PUBLIC_BASE_URL=http://${WebElasticIp}
+          STORAGE_DRIVER=s3
+          AWS_REGION=${AWS::Region}
+          AWS_S3_BUCKET=${StorageBucket}
+          AWS_S3_PREFIX=ar-presentations
+          ENV
+
+          chown root:www-data /var/www/ar-presentations/.env
+          chmod 640 /var/www/ar-presentations/.env
+          chown -R www-data:www-data /var/www/ar-presentations/backend/storage
+
+          cat > /etc/apache2/sites-available/ar-presentations.conf <<'APACHE'
+          <VirtualHost *:80>
+              ServerName _
+              DocumentRoot /var/www/ar-presentations/frontend
+
+              <Directory /var/www/ar-presentations/frontend>
+                  Options FollowSymLinks
+                  AllowOverride None
+                  Require all granted
+                  DirectoryIndex index.php
+              </Directory>
+
+              <FilesMatch "^\.">
+                  Require all denied
+              </FilesMatch>
+
+              ErrorLog ${!APACHE_LOG_DIR}/ar-presentations-error.log
+              CustomLog ${!APACHE_LOG_DIR}/ar-presentations-access.log combined
+          </VirtualHost>
+          APACHE
+
+          a2dissite 000-default
+          a2ensite ar-presentations
+
+          cat > /etc/php/8.3/apache2/conf.d/99-ar-presentations.ini <<'PHP'
+          upload_max_filesize = 20M
+          post_max_size = 22M
+          max_execution_time = 300
+          max_input_time = 300
+          memory_limit = 256M
+          PHP
+
+          for attempt in $(seq 1 60); do
+            if MYSQL_PWD="$DB_PASS" mysql \
+              --connect-timeout=5 \
+              --host='${Database.Endpoint.Address}' \
+              --port='${Database.Endpoint.Port}' \
+              --user="$DB_USER" \
+              --execute='SELECT 1' >/dev/null 2>&1; then
+              break
+            fi
+            sleep 10
+          done
+
+          MYSQL_PWD="$DB_PASS" mysql \
+            --host='${Database.Endpoint.Address}' \
+            --port='${Database.Endpoint.Port}' \
+            --user="$DB_USER" \
+            '${DatabaseName}' \
+            < /var/www/ar-presentations/backend/database/schema.sql
+
+          systemctl restart apache2
+          curl -fsS http://localhost/health.php
+          INSTANCE_ID="$(curl -fsS \
+            -H "X-aws-ec2-metadata-token: $TOKEN" \
+            http://169.254.169.254/latest/meta-data/instance-id)"
+          aws cloudformation signal-resource \
+            --region '${AWS::Region}' \
+            --stack-name '${AWS::StackName}' \
+            --logical-resource-id WebServer \
+            --unique-id "$INSTANCE_ID" \
+            --status SUCCESS
+
+  WebElasticIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-web'
+
+  WebElasticIpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt WebElasticIp.AllocationId
+      InstanceId: !Ref WebServer
+
+  PresentationValidatorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ValidatePresentationObjects
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectTagging
+                  - s3:PutObjectTagging
+                Resource: !Sub '${StorageBucket.Arn}/ar-presentations/presentations/*'
+
+  PresentationValidatorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Validates that newly uploaded PPTX files have a ZIP-compatible signature.
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt PresentationValidatorRole.Arn
+      Runtime: python3.13
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import logging
+          import os
+          import urllib.parse
+
+          import boto3
+
+          LOGGER = logging.getLogger()
+          LOGGER.setLevel(logging.INFO)
+          S3 = boto3.client("s3")
+          VALID_ZIP_SIGNATURES = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+
+
+          def handler(event, _context):
+              detail = event["detail"]
+              bucket = detail["bucket"]["name"]
+              key = urllib.parse.unquote_plus(detail["object"]["key"])
+
+              if not key.lower().endswith(".pptx"):
+                  return {"ignored": True, "key": key}
+
+              response = S3.get_object(Bucket=bucket, Key=key, Range="bytes=0-3")
+              signature = response["Body"].read(4)
+              valid = signature in VALID_ZIP_SIGNATURES
+
+              current = S3.get_object_tagging(Bucket=bucket, Key=key)["TagSet"]
+              tags = {tag["Key"]: tag["Value"] for tag in current}
+              tags["pptx-signature"] = "valid" if valid else "invalid"
+              tags["validated-by"] = os.environ.get("AWS_LAMBDA_FUNCTION_NAME", "pptx-validator")
+
+              S3.put_object_tagging(
+                  Bucket=bucket,
+                  Key=key,
+                  Tagging={
+                      "TagSet": [
+                          {"Key": tag_key, "Value": tag_value}
+                          for tag_key, tag_value in sorted(tags.items())
+                      ]
+                  },
+              )
+
+              LOGGER.info("Validated s3://%s/%s: %s", bucket, key, valid)
+              return {"bucket": bucket, "key": key, "valid": valid}
+
+  PresentationCreatedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Run PPTX validation when an original presentation is uploaded.
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - Object Created
+        detail:
+          bucket:
+            name:
+              - !Ref StorageBucket
+          object:
+            key:
+              - prefix: ar-presentations/presentations/
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt PresentationValidatorFunction.Arn
+          Id: PresentationValidator
+
+  PresentationValidatorInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref PresentationValidatorFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt PresentationCreatedRule.Arn
+
+Outputs:
+  ApplicationUrl:
+    Description: Public HTTP URL of the application.
+    Value: !Sub 'http://${WebElasticIp}'
+  PublicIp:
+    Value: !Ref WebElasticIp
+  WebServerInstanceId:
+    Value: !Ref WebServer
+  StorageBucketName:
+    Value: !Ref StorageBucket
+  DatabaseEndpoint:
+    Value: !GetAtt Database.Endpoint.Address
+  DatabaseSecretArn:
+    Value: !Ref DatabaseSecret
+  OpenAiSecretName:
+    Value: !Ref OpenAiSecretName
+  PresentationValidatorFunctionName:
+    Value: !Ref PresentationValidatorFunction

@@ -1,10 +1,5 @@
 -- AR-Enhanced Presentations Database Schema
-
-CREATE DATABASE IF NOT EXISTS ar_presentations
-CHARACTER SET utf8mb4 
-COLLATE utf8mb4_unicode_ci;
-
-USE ar_presentations;
+-- Import this file into the database selected by DB_NAME.
 
 CREATE TABLE users (
     user_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -63,7 +58,3 @@ CREATE TABLE qr_codes (
     FOREIGN KEY (content_id) REFERENCES ai_generated_content(content_id) ON DELETE SET NULL,
     FOREIGN KEY (presentation_id) REFERENCES presentations(presentation_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Insert default admin user (password: admin123)
-INSERT INTO users (username, email, password_hash, role) VALUES
-('admin', 'admin@example.com', '$2y$12$bQSOBAXxTBo2/ROhgqboruk7grFHl/hXyyIiwpy9d366nYolMXJ6W', 'admin');
