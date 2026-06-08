@@ -57,12 +57,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'application/vnd.openxmlformats-officedocument.presentationml.presentation'
     ];
 
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-    $mimeType = finfo_file($finfo, $file['tmp_name']);
-    finfo_close($finfo);
+    $mimeType = null;
+    if (function_exists('finfo_open')) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo !== false) {
+            $detectedMimeType = finfo_file($finfo, $file['tmp_name']);
+            finfo_close($finfo);
+            if ($detectedMimeType !== false) {
+                $mimeType = $detectedMimeType;
+            }
+        }
+    }
+
+    if ($mimeType === null) {
+        $mimeType = $file['type'] ?? '';
+        error_log('Unable to initialize fileinfo; using the upload MIME type as a fallback.');
+    }
 
     if (!in_array($mimeType, $allowedMimeTypes)) {
         $errors[] = "Invalid file type detected.";
+    }
+
+    if (!isValidPptxPackage($file['tmp_name'])) {
+        $errors[] = "Invalid or corrupted PPTX file.";
     }
 
     if ($file['size'] > MAX_FILE_SIZE) {
@@ -158,5 +175,19 @@ function displayError($errors)
 
     </html>
 <?php
+}
+
+function isValidPptxPackage(string $path): bool
+{
+    $zip = new ZipArchive();
+    if ($zip->open($path) !== true) {
+        return false;
+    }
+
+    $isValid = $zip->locateName('[Content_Types].xml') !== false
+        && $zip->locateName('ppt/presentation.xml') !== false;
+    $zip->close();
+
+    return $isValid;
 }
 ?>
