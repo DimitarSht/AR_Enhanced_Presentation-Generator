@@ -230,7 +230,7 @@ Resources:
     UpdateReplacePolicy: Snapshot
     Properties:
       AllocatedStorage: 20
-      BackupRetentionPeriod: 7
+      BackupRetentionPeriod: 1
       DBInstanceClass: !Ref DatabaseInstanceClass
       DBName: !Ref DatabaseName
       DBSubnetGroupName: !Ref DatabaseSubnetGroup
@@ -329,9 +329,13 @@ Resources:
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get install -y \
-            apache2 awscli composer default-mysql-client git jq unzip \
+            apache2 composer curl default-mysql-client git jq unzip \
             libapache2-mod-php php php-cli php-curl php-gd php-mbstring \
             php-mysql php-xml php-zip
+
+          curl -fsSLo /tmp/awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          /tmp/aws/install
 
           systemctl enable apache2
           a2enmod rewrite headers
