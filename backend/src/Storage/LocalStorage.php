@@ -49,6 +49,27 @@ class LocalStorage implements FileStorage
         }
     }
 
+    public function deleteByPrefix(string $prefix): void
+    {
+        $pathPrefix = $this->path($prefix);
+        $directory = dirname($pathPrefix);
+        $filenamePrefix = basename($pathPrefix);
+
+        if (!is_dir($directory)) {
+            return;
+        }
+
+        foreach (new DirectoryIterator($directory) as $file) {
+            if (
+                $file->isFile()
+                && str_starts_with($file->getFilename(), $filenamePrefix)
+                && !unlink($file->getPathname())
+            ) {
+                throw new RuntimeException("Unable to delete file: {$file->getPathname()}");
+            }
+        }
+    }
+
     private function path(string $key): string
     {
         return $this->root . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, ltrim($key, '/\\'));

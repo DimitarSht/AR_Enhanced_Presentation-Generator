@@ -5,7 +5,7 @@
       "Sid": "ListApplicationPrefix",
       "Effect": "Allow",
       "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::REPLACE_WITH_BUCKET_NAME",
+      "Resource": "arn:aws:s3:::ar-presentations-dimitar-sht-360831508656-eu-north-1-an",
       "Condition": {
         "StringLike": {
           "s3:prefix": [
@@ -23,7 +23,7 @@
         "s3:GetObject",
         "s3:PutObject"
       ],
-      "Resource": "arn:aws:s3:::REPLACE_WITH_BUCKET_NAME/ar-presentations/*"
+      "Resource": "arn:aws:s3:::ar-presentations-dimitar-sht-360831508656-eu-north-1-an/ar-presentations/*"
     }
   ]
 }

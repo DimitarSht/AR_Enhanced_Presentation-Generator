@@ -29,6 +29,9 @@ define('AWS_S3_BUCKET', envValue('AWS_S3_BUCKET', ''));
 define('AWS_S3_PREFIX', trim(envValue('AWS_S3_PREFIX', 'ar-presentations'), '/'));
 define('AWS_S3_ENDPOINT', envValue('AWS_S3_ENDPOINT'));
 define('AWS_S3_PATH_STYLE', filter_var(envValue('AWS_S3_PATH_STYLE', 'false'), FILTER_VALIDATE_BOOL));
+define('AWS_ACCESS_KEY_ID', envValue('AWS_ACCESS_KEY_ID'));
+define('AWS_SECRET_ACCESS_KEY', envValue('AWS_SECRET_ACCESS_KEY'));
+define('AWS_SESSION_TOKEN', envValue('AWS_SESSION_TOKEN'));
 
 define('STORAGE_DIR', __DIR__ . '/storage/');
 define('UPLOAD_DIR', STORAGE_DIR . 'presentations/');

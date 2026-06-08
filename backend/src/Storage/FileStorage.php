@@ -11,4 +11,6 @@ interface FileStorage
     public function size(string $key): ?int;
 
     public function delete(string $key): void;
+
+    public function deleteByPrefix(string $prefix): void;
 }
