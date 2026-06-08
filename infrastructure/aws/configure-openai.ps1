@@ -28,12 +28,19 @@ try {
     )
 
     $secretFileUri = "file://" + ($tempFile -replace "\\", "/")
-    aws secretsmanager describe-secret `
-        --secret-id $SecretName `
-        --region $Region `
-        --profile $Profile *> $null
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        aws secretsmanager describe-secret `
+            --secret-id $SecretName `
+            --region $Region `
+            --profile $Profile *> $null
+        $secretExists = $LASTEXITCODE -eq 0
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
 
-    if ($LASTEXITCODE -eq 0) {
+    if ($secretExists) {
         aws secretsmanager put-secret-value `
             --secret-id $SecretName `
             --secret-string $secretFileUri `
