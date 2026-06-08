@@ -54,18 +54,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $allowedMimeTypes = [
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/zip',
+        'application/octet-stream',
     ];
 
     $mimeType = null;
     if (function_exists('finfo_open')) {
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        if ($finfo !== false) {
-            $detectedMimeType = finfo_file($finfo, $file['tmp_name']);
-            finfo_close($finfo);
-            if ($detectedMimeType !== false) {
-                $mimeType = $detectedMimeType;
+        try {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo !== false) {
+                $detectedMimeType = finfo_file($finfo, $file['tmp_name']);
+                finfo_close($finfo);
+                if ($detectedMimeType !== false) {
+                    $mimeType = $detectedMimeType;
+                }
             }
+        } catch (Throwable $e) {
+            error_log('Unable to inspect the upload MIME type: ' . $e->getMessage());
         }
     }
 
@@ -74,11 +80,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         error_log('Unable to initialize fileinfo; using the upload MIME type as a fallback.');
     }
 
-    if (!in_array($mimeType, $allowedMimeTypes)) {
+    $isValidPptx = isValidPptxPackage($file['tmp_name']);
+
+    if (!in_array($mimeType, $allowedMimeTypes, true) && !$isValidPptx) {
         $errors[] = "Invalid file type detected.";
     }
 
-    if (!isValidPptxPackage($file['tmp_name'])) {
+    if (!$isValidPptx) {
         $errors[] = "Invalid or corrupted PPTX file.";
     }
 

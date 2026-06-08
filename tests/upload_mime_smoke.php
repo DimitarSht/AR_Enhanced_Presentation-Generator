@@ -10,8 +10,9 @@ if ($uploadSource === false) {
 $requiredChecks = [
     "\$finfo !== false",
     "\$detectedMimeType !== false",
+    "catch (Throwable \$e)",
     "\$file['type'] ?? ''",
-    "isValidPptxPackage(\$file['tmp_name'])",
+    "\$isValidPptx = isValidPptxPackage(\$file['tmp_name'])",
     "\$zip->locateName('[Content_Types].xml')",
     "\$zip->locateName('ppt/presentation.xml')",
 ];
