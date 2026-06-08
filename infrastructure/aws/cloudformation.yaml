@@ -327,6 +327,9 @@ Resources:
           exec > >(tee /var/log/ar-presentations-bootstrap.log | logger -t user-data -s 2>/dev/console) 2>&1
 
           export DEBIAN_FRONTEND=noninteractive
+          export HOME=/root
+          export COMPOSER_HOME=/root/.composer
+          install -d -m 0700 "$COMPOSER_HOME"
           apt-get update
           apt-get install -y \
             apache2 composer curl default-mysql-client git jq unzip \
@@ -344,6 +347,7 @@ Resources:
           git clone --branch '${GitRef}' --depth 1 '${GitRepositoryUrl}' /var/www/ar-presentations
           cd /var/www/ar-presentations
           COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+          install -d -o www-data -g www-data /var/www/ar-presentations/backend/storage
 
           SECRET_JSON="$(aws secretsmanager get-secret-value \
             --region '${AWS::Region}' \
