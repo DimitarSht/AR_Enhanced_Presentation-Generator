@@ -13,6 +13,10 @@ Parameters:
     Type: String
     Default: 127.0.0.1/32
     Description: CIDR allowed to SSH to EC2. Keep the default to disable remote SSH.
+  AllowedHttpCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR allowed to access the application over HTTP. Use your public IP with /32 for private access.
   InstanceType:
     Type: String
     Default: t3.micro
@@ -155,7 +159,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: 0.0.0.0/0
+          CidrIp: !Ref AllowedHttpCidr
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
