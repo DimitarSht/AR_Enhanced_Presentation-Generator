@@ -86,18 +86,32 @@ $commands = @(
     "sudo systemctl restart apache2"
 )
 $parameters = @{ commands = $commands } | ConvertTo-Json -Compress
+$parametersFile = Join-Path ([System.IO.Path]::GetTempPath()) ("ssm-parameters-" + [guid]::NewGuid() + ".json")
 
-$commandId = aws ssm send-command `
-    --instance-ids $instanceId `
-    --document-name AWS-RunShellScript `
-    --parameters $parameters `
-    --region $Region `
-    --profile $Profile `
-    --query Command.CommandId `
-    --output text
+try {
+    [System.IO.File]::WriteAllText(
+        $parametersFile,
+        $parameters,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    $parametersFileUri = "file://" + ($parametersFile -replace "\\", "/")
 
-if ($LASTEXITCODE -ne 0) {
-    throw "Unable to refresh the application configuration."
+    $commandId = aws ssm send-command `
+        --instance-ids $instanceId `
+        --document-name AWS-RunShellScript `
+        --parameters $parametersFileUri `
+        --region $Region `
+        --profile $Profile `
+        --query Command.CommandId `
+        --output text
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to refresh the application configuration."
+    }
+} finally {
+    if (Test-Path -LiteralPath $parametersFile) {
+        Remove-Item -LiteralPath $parametersFile -Force
+    }
 }
 
 aws ssm wait command-executed `
