@@ -402,6 +402,14 @@ Resources:
           a2dissite 000-default
           a2ensite ar-presentations
 
+          cat > /etc/php/8.3/apache2/conf.d/99-ar-presentations.ini <<'PHP'
+          upload_max_filesize = 20M
+          post_max_size = 22M
+          max_execution_time = 300
+          max_input_time = 300
+          memory_limit = 256M
+          PHP
+
           for attempt in $(seq 1 60); do
             if MYSQL_PWD="$DB_PASS" mysql \
               --connect-timeout=5 \

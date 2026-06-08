@@ -43,7 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errors = [];
 
     if ($file['error'] !== UPLOAD_ERR_OK) {
-        $errors[] = "Upload error code: " . $file['error'];
+        displayError([uploadErrorMessage((int) $file['error'])]);
+        exit;
     }
 
     $allowedExtensions = ['pptx'];
@@ -187,8 +188,19 @@ function displayError($errors)
 
 function isValidPptxPackage(string $path): bool
 {
+    if ($path === '' || !is_file($path)) {
+        return false;
+    }
+
     $zip = new ZipArchive();
-    if ($zip->open($path) !== true) {
+    try {
+        $opened = $zip->open($path);
+    } catch (Throwable $e) {
+        error_log('Unable to inspect PPTX package: ' . $e->getMessage());
+        return false;
+    }
+
+    if ($opened !== true) {
         return false;
     }
 
@@ -197,5 +209,19 @@ function isValidPptxPackage(string $path): bool
     $zip->close();
 
     return $isValid;
+}
+
+function uploadErrorMessage(int $error): string
+{
+    return match ($error) {
+        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE =>
+            'The presentation exceeds the server upload limit. Maximum size is 20 MB.',
+        UPLOAD_ERR_PARTIAL => 'The presentation upload was interrupted. Please try again.',
+        UPLOAD_ERR_NO_FILE => 'Please select a presentation to upload.',
+        UPLOAD_ERR_NO_TMP_DIR => 'The server upload directory is unavailable.',
+        UPLOAD_ERR_CANT_WRITE => 'The server could not save the uploaded presentation.',
+        UPLOAD_ERR_EXTENSION => 'A server extension stopped the presentation upload.',
+        default => 'The presentation upload failed.',
+    };
 }
 ?>

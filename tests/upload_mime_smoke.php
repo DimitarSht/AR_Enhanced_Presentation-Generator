@@ -13,6 +13,9 @@ $requiredChecks = [
     "catch (Throwable \$e)",
     "\$file['type'] ?? ''",
     "\$isValidPptx = isValidPptxPackage(\$file['tmp_name'])",
+    "\$path === '' || !is_file(\$path)",
+    "uploadErrorMessage((int) \$file['error'])",
+    "UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE",
     "\$zip->locateName('[Content_Types].xml')",
     "\$zip->locateName('ppt/presentation.xml')",
 ];
