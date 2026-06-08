@@ -417,19 +417,29 @@ function generateImageFromText($client, $text, $presentationFilename, $slideNum)
             $cleanText = substr($text, 0, 900);
             $prompt = "Create a professional, high-quality, visually appealing image that represents this content: " . $cleanText;
 
-            echo "Sending request to DALL-E 3...<br>";
+            echo "Sending request to " . htmlspecialchars(OPENAI_IMAGE_MODEL) . "...<br>";
             flush();
 
             $response = $client->images()->create([
-                'model' => 'dall-e-3',
+                'model' => OPENAI_IMAGE_MODEL,
                 'prompt' => $prompt,
                 'n' => 1,
                 'size' => '1024x1024',
-                'quality' => 'standard',
+                'quality' => 'low',
             ]);
 
-            if (isset($response->data[0]->url)) {
-                $imageUrl = $response->data[0]->url;
+            if (isset($response->data[0])) {
+                $imageData = null;
+                if ($response->data[0]->b64_json !== '') {
+                    $imageData = base64_decode($response->data[0]->b64_json, true);
+                } elseif ($response->data[0]->url !== '') {
+                    $imageData = file_get_contents($response->data[0]->url);
+                }
+
+                if ($imageData === false || $imageData === null) {
+                    throw new RuntimeException('The image API returned no usable image data.');
+                }
+
                 $aiImagePath = AI_IMAGES_DIR
                     . basename($presentationFilename)
                     . '_slide_'
@@ -437,14 +447,18 @@ function generateImageFromText($client, $text, $presentationFilename, $slideNum)
                     . '_ai_'
                     . uniqid()
                     . '.png';
-                file_put_contents($aiImagePath, file_get_contents($imageUrl));
+                if (file_put_contents($aiImagePath, $imageData) === false) {
+                    throw new RuntimeException('Unable to save the generated image.');
+                }
                 persistFile('ai_images', basename($aiImagePath), $aiImagePath);
                 return $aiImagePath;
             }
 
             return null;
-        } catch (Exception $e) {
-            echo "<span class='error'>DALL-E Error: " . $e->getMessage() . "</span><br>";
+        } catch (Throwable $e) {
+            echo "<span class='error'>Image generation error: "
+                . htmlspecialchars($e->getMessage())
+                . "</span><br>";
             return null;
         }
     }

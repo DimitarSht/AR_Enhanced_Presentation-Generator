@@ -19,6 +19,7 @@ define('DB_PASS', envValue('DB_PASS', ''));
 define('DB_CHARSET', envValue('DB_CHARSET', 'utf8mb4'));
 
 define('OPENAI_API_KEY', envValue('OPENAI_API_KEY', ''));
+define('OPENAI_IMAGE_MODEL', envValue('OPENAI_IMAGE_MODEL', 'gpt-image-2'));
 define('PUBLIC_BASE_URL', rtrim(envValue('PUBLIC_BASE_URL', 'http://localhost:8000'), '/'));
 define('MAX_FILE_SIZE', (int) envValue('MAX_FILE_SIZE', (string) (20 * 1024 * 1024)));
 define('API_RATE_LIMIT_SLEEP', (int) envValue('API_RATE_LIMIT_SLEEP', '5'));
