@@ -12,6 +12,11 @@ v2.0.0
 - Added S3 persistence for presentations, generated content, and QR codes.
 - Added private-bucket IAM policy guidance under infrastructure/aws/.
 - Removed the unused PHPPresentation dependency and its vulnerable transitive packages.
+- Added a CloudFormation deployment for EC2, private RDS MySQL, private S3,
+  Secrets Manager, networking, IAM roles, and an Elastic IP.
+- Added an S3/EventBridge Lambda that validates uploaded PPTX signatures and
+  records the result as S3 object tags.
+- Added generated-file cleanup across local storage and S3.
 
 v1.0.x
 ------

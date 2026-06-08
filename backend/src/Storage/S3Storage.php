@@ -12,10 +12,19 @@ class S3Storage implements FileStorage
         string $region,
         private string $prefix = '',
         ?string $endpoint = null,
-        bool $pathStyle = false
+        bool $pathStyle = false,
+        ?string $accessKeyId = null,
+        ?string $secretAccessKey = null,
+        ?string $sessionToken = null
     ) {
         if ($bucket === '') {
             throw new InvalidArgumentException('AWS_S3_BUCKET is required when STORAGE_DRIVER=s3.');
+        }
+
+        if (($accessKeyId === null) !== ($secretAccessKey === null)) {
+            throw new InvalidArgumentException(
+                'AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must either both be set or both be omitted.'
+            );
         }
 
         $options = [
@@ -26,6 +35,14 @@ class S3Storage implements FileStorage
 
         if ($endpoint !== null) {
             $options['endpoint'] = $endpoint;
+        }
+
+        if ($accessKeyId !== null && $secretAccessKey !== null) {
+            $options['credentials'] = array_filter([
+                'key' => $accessKeyId,
+                'secret' => $secretAccessKey,
+                'token' => $sessionToken,
+            ], static fn ($value) => $value !== null && $value !== '');
         }
 
         $this->client = new S3Client($options);
@@ -94,6 +111,41 @@ class S3Storage implements FileStorage
         $this->client->deleteObject([
             'Bucket' => $this->bucket,
             'Key' => $this->key($key),
+        ]);
+    }
+
+    public function deleteByPrefix(string $prefix): void
+    {
+        $objects = [];
+        $pages = $this->client->getPaginator('ListObjectsV2', [
+            'Bucket' => $this->bucket,
+            'Prefix' => $this->key($prefix),
+        ]);
+
+        foreach ($pages as $page) {
+            foreach ($page['Contents'] ?? [] as $object) {
+                $objects[] = ['Key' => $object['Key']];
+
+                if (count($objects) === 1000) {
+                    $this->deleteObjects($objects);
+                    $objects = [];
+                }
+            }
+        }
+
+        if ($objects !== []) {
+            $this->deleteObjects($objects);
+        }
+    }
+
+    private function deleteObjects(array $objects): void
+    {
+        $this->client->deleteObjects([
+            'Bucket' => $this->bucket,
+            'Delete' => [
+                'Objects' => $objects,
+                'Quiet' => true,
+            ],
         ]);
     }
 

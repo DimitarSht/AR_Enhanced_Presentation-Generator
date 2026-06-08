@@ -70,6 +70,12 @@ class PresentationDB {
         deleteStoredFile('presentations', $pres['stored_filename'], UPLOAD_DIR . $pres['stored_filename']);
         deleteStoredFile('processed', $processedFilename, PROCESSED_DIR . $processedFilename);
 
+        foreach ([$pres['stored_filename'] . '_', $processedFilename . '_'] as $generatedPrefix) {
+            deleteStoredFilesByPrefix('qrcodes', $generatedPrefix, QR_DIR);
+            deleteStoredFilesByPrefix('ai_images', $generatedPrefix, AI_IMAGES_DIR);
+            deleteStoredFilesByPrefix('ai_texts', $generatedPrefix, AI_TEXTS_DIR);
+        }
+
         $sql = "DELETE FROM presentations WHERE presentation_id = :pid";
         $stmt = $db->prepare($sql);
         $stmt->execute([':pid' => $presentationId]);

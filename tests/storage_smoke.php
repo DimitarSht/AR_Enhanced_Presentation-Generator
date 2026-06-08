@@ -33,10 +33,26 @@ try {
         throw new RuntimeException('Stored file was not deleted.');
     }
 
+    $storage->put('qrcodes/example_slide_1.png', $source);
+    $storage->put('qrcodes/example_slide_2.png', $source);
+    $storage->put('qrcodes/other_slide_1.png', $source);
+    $storage->deleteByPrefix('qrcodes/example_');
+
+    if (
+        $storage->exists('qrcodes/example_slide_1.png')
+        || $storage->exists('qrcodes/example_slide_2.png')
+        || !$storage->exists('qrcodes/other_slide_1.png')
+    ) {
+        throw new RuntimeException('Prefix cleanup did not remove only matching files.');
+    }
+
+    $storage->delete('qrcodes/other_slide_1.png');
+
     echo "Storage smoke test passed.\n";
 } finally {
     @unlink($source);
     @unlink($download);
     @rmdir($root . '/processed');
+    @rmdir($root . '/qrcodes');
     @rmdir($root);
 }
