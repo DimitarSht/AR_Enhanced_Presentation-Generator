@@ -5,6 +5,7 @@ param(
     [string]$StackName = "ar-presentations",
     [string]$Region = "eu-north-1",
     [string]$GitRef = "main",
+    [string]$OpenAiSecretName = "ar-presentations/openai",
     [string]$AllowedHttpCidr = "0.0.0.0/0",
     [string]$AllowedSshCidr = "127.0.0.1/32"
 )
@@ -25,6 +26,7 @@ aws cloudformation deploy `
     --parameter-overrides `
         "KeyPairName=$KeyPairName" `
         "GitRef=$GitRef" `
+        "OpenAiSecretName=$OpenAiSecretName" `
         "AllowedHttpCidr=$AllowedHttpCidr" `
         "AllowedSshCidr=$AllowedSshCidr" `
     --no-fail-on-empty-changeset

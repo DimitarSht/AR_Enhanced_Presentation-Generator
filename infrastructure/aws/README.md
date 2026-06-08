@@ -56,6 +56,20 @@ IP, deploy again with the new address before trying to open the application.
 
 The script prints the application URL, S3 bucket, RDS endpoint, EC2 instance ID, secret ARN, and Lambda function name.
 
+## Configure OpenAI
+
+OpenAI API billing is separate from AWS and ChatGPT. After creating an OpenAI
+project API key, configure it without putting the key in source control:
+
+```powershell
+.\infrastructure\aws\configure-openai.ps1
+```
+
+The script prompts for the key securely, stores it in AWS Secrets Manager as
+`ar-presentations/openai`, refreshes the EC2 application configuration through
+Systems Manager, and restarts Apache. The EC2 role can read only the configured
+OpenAI secret and the generated database secret.
+
 The stack creates a new S3 bucket under CloudFormation management. It does not adopt the bucket created during local testing. After deployment, use the bucket from the `StorageBucketName` output. Existing objects can be copied separately if they must be preserved.
 
 The schema does not create a default administrator. Register a user first, then promote the selected account in RDS:
